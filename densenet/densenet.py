@@ -1,31 +1,7 @@
 import numpy as np
 import tensorflow as tf
-
-def unpickle(file):
-  import cPickle
-  fo = open(file, 'rb')
-  dict = cPickle.load(fo)
-  fo.close()
-  if 'data' in dict:
-    dict['data'] = dict['data'].reshape((-1, 3, 32, 32)).swapaxes(1, 3).swapaxes(1, 2).reshape(-1, 32*32*3) / 256.
-
-  return dict
-
-def load_data_one(f):
-  batch = unpickle(f)
-  data = batch['data']
-  labels = batch['labels']
-  print "Loading %s: %d" % (f, len(data))
-  return data, labels
-
-def load_data(files, data_dir, label_count):
-  data, labels = load_data_one(data_dir + '/' + files[0])
-  for f in files[1:]:
-    data_n, labels_n = load_data_one(data_dir + '/' + f)
-    data = np.append(data, data_n, axis=0)
-    labels = np.append(labels, labels_n, axis=0)
-  labels = np.array([ [ float(i == label) for i in xrange(label_count) ] for label in labels ])
-  return data, labels
+from keras.datasets import cifar10
+from sklearn.preprocessing import OneHotEncoder
 
 def run_in_batch_avg(session, tensors, batch_placeholders, feed_dict={}, batch_size=200):                              
   res = [ 0 ] * len(tensors)                                                                                           
@@ -69,7 +45,7 @@ def block(input, layers, in_features, growth, is_training, keep_prob):
   features = in_features
   for idx in xrange(layers):
     tmp = batch_activ_conv(current, features, growth, 3, is_training, keep_prob)
-    current = tf.concat(3, (current, tmp))
+    current = tf.concat((current, tmp), 3)
     features += growth
   return current, features
 
@@ -81,15 +57,13 @@ def run_model(data, image_dim, label_count, depth):
   layers = (depth - 4) / 3
   graph = tf.Graph()
   with graph.as_default():
-    xs = tf.placeholder("float", shape=[None, image_dim])
+    xs = tf.placeholder("float", shape=[None, 32, 32, 3])
     ys = tf.placeholder("float", shape=[None, label_count])
     lr = tf.placeholder("float", shape=[])
     keep_prob = tf.placeholder(tf.float32)
     is_training = tf.placeholder("bool", shape=[])
 
-
-    current = tf.reshape(xs, [ -1, 32, 32, 3 ])
-    current = conv2d(current, 3, 16, 3)
+    current = conv2d(xs, 3, 16, 3)
 
     current, features = block(current, layers, 16, 12, is_training, keep_prob)
     current = batch_activ_conv(current, features, features, 1, is_training, keep_prob)
@@ -120,15 +94,12 @@ def run_model(data, image_dim, label_count, depth):
     session.run(tf.global_variables_initializer())
     saver = tf.train.Saver()
     train_data, train_labels = data['train_data'], data['train_labels']
-    batch_count = len(train_data) / batch_size
-    batches_data = np.split(train_data[:batch_count * batch_size], batch_count)
-    batches_labels = np.split(train_labels[:batch_count * batch_size], batch_count)
-    print "Batch per epoch: ", batch_count
     for epoch in xrange(1, 1+300):
       if epoch == 150: learning_rate = 0.01
       if epoch == 225: learning_rate = 0.001
-      for batch_idx in xrange(batch_count):
-        xs_, ys_ = batches_data[batch_idx], batches_labels[batch_idx]
+      for batch_idx in range((train_data.shape[0] // batch_size) - 1):
+        start, end = batch_idx * batch_size, (batch_idx+1) * batch_size
+        xs_, ys_ = train_data[start:end], train_labels[start:end]
         batch_res = session.run([ train_step, cross_entropy, accuracy ],
           feed_dict = { xs: xs_, ys: ys_, lr: learning_rate, is_training: True, keep_prob: 0.8 })
         if batch_idx % 100 == 0: print epoch, batch_idx, batch_res[1:]
@@ -139,18 +110,18 @@ def run_model(data, image_dim, label_count, depth):
       print epoch, batch_res[1:], test_results
 
 def run():
-  data_dir = 'data'
   image_size = 32
   image_dim = image_size * image_size * 3
-  meta = unpickle(data_dir + '/batches.meta')
-  label_names = meta['label_names']
-  label_count = len(label_names)
+  label_count = 10
 
-  train_files = [ 'data_batch_%d' % d for d in xrange(1, 6) ]
-  train_data, train_labels = load_data(train_files, data_dir, label_count)
-  pi = np.random.permutation(len(train_data))
-  train_data, train_labels = train_data[pi], train_labels[pi]
-  test_data, test_labels = load_data([ 'test_batch' ], data_dir, label_count)
+  (train_data, train_labels), (test_data, test_labels) = cifar10.load_data()
+  oe = OneHotEncoder()
+  train_data = train_data / 255.
+  test_data = test_data / 255.
+
+  train_labels = oe.fit_transform(train_labels).toarray()
+  test_labels = oe.fit_transform(test_labels).toarray()
+
   print "Train:", np.shape(train_data), np.shape(train_labels)
   print "Test:", np.shape(test_data), np.shape(test_labels)
   data = { 'train_data': train_data,
