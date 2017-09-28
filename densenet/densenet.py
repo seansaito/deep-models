@@ -135,6 +135,8 @@ def run():
     (train_data, train_labels), (test_data, test_labels) = cifar10.load_data()
     oe = OneHotEncoder()
 
+    train_data = train_data / 255.
+    test_data = test_data / 255.
     train_labels = oe.fit_transform(train_labels).toarray()
     test_labels = oe.fit_transform(test_labels).toarray()
 
