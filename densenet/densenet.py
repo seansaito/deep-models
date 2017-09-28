@@ -2,9 +2,20 @@ import numpy as np
 import tensorflow as tf
 from keras.datasets import cifar10
 from sklearn.preprocessing import OneHotEncoder
-
+import os
+import numpy as np
+import tensorflow as tf
+import pandas
+from keras.datasets import cifar100
+from sklearn.cross_validation import train_test_split
+import datetime
+from annoy import AnnoyIndex
+from sklearn.metrics import accuracy_score
+from sklearn.preprocessing import OneHotEncoder
+from skimage.transform import rescale, resize, downscale_local_mean
+import random
 os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
-os.environ["CUDA_VISIBLE_DEVICES"]="1,0"
+os.environ["CUDA_VISIBLE_DEVICES"]="6"
 
 def run_in_batch_avg(session, tensors, batch_placeholders, feed_dict={}, batch_size=200):                              
     res = [ 0 ] * len(tensors)                                                                                           
